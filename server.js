@@ -1,6 +1,10 @@
 import express from 'express';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 
 const app = express();
 app.use(express.json());
@@ -13,15 +17,21 @@ const server = new Server({
   name: 'coolify-mcp',
   version: '1.0.0',
 }, {
-  capabilities: { tools: {} },
+  capabilities: {
+    tools: {},
+  },
 });
 
-server.setRequestHandler('tools/list', async () => {
+server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
         name: 'coolify_list_apps',
         description: 'Liste toutes les applications Coolify',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
       },
       {
         name: 'coolify_get_app',
@@ -29,16 +39,19 @@ server.setRequestHandler('tools/list', async () => {
         inputSchema: {
           type: 'object',
           properties: {
-            appId: { type: 'string', description: 'ID de l\'application' }
+            appId: {
+              type: 'string',
+              description: 'ID de l\'application',
+            },
           },
-          required: ['appId']
-        }
-      }
+          required: ['appId'],
+        },
+      },
     ],
   };
 });
 
-server.setRequestHandler('tools/call', async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   
   const headers = {
@@ -46,23 +59,45 @@ server.setRequestHandler('tools/call', async (request) => {
     'Content-Type': 'application/json',
   };
   
-  if (name === 'coolify_list_apps') {
-    const res = await fetch(`${COOLIFY_API_URL}/applications`, { headers });
-    const data = await res.json();
+  try {
+    if (name === 'coolify_list_apps') {
+      const res = await fetch(`${COOLIFY_API_URL}/applications`, { headers });
+      const data = await res.json();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(data, null, 2),
+          },
+        ],
+      };
+    }
+    
+    if (name === 'coolify_get_app') {
+      const res = await fetch(`${COOLIFY_API_URL}/applications/${args.appId}`, { headers });
+      const data = await res.json();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(data, null, 2),
+          },
+        ],
+      };
+    }
+    
+    throw new Error(`Outil inconnu: ${name}`);
+  } catch (error) {
     return {
-      content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+      content: [
+        {
+          type: 'text',
+          text: `Erreur: ${error.message}`,
+        },
+      ],
+      isError: true,
     };
   }
-  
-  if (name === 'coolify_get_app') {
-    const res = await fetch(`${COOLIFY_API_URL}/applications/${args.appId}`, { headers });
-    const data = await res.json();
-    return {
-      content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-    };
-  }
-  
-  throw new Error(`Outil inconnu: ${name}`);
 });
 
 app.get('/sse', async (req, res) => {
@@ -80,10 +115,12 @@ app.post('/message', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`MCP Server démarré sur le port ${PORT}`);
+  console.log(`✅ MCP Server démarré sur le port ${PORT}`);
+  console.log(`🔗 Endpoint SSE: http://localhost:${PORT}/sse`);
+  console.log(`❤️  Health check: http://localhost:${PORT}/health`);
 });
