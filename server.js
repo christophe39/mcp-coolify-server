@@ -302,4 +302,97 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     
     if (name === 'nocodb_create_record') {
-      const res = await fetch(`${NOCODB_API_URL}/api/
+      const res = await fetch(`${NOCODB_API_URL}/api/v1/db/data/v1/${args.baseId}/${args.tableName}`, {
+        method: 'POST',
+        headers: {
+          'xc-token': NOCODB_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(args.data),
+      });
+      const data = await res.json();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(data, null, 2),
+          },
+        ],
+      };
+    }
+    
+    if (name === 'nocodb_update_record') {
+      const res = await fetch(`${NOCODB_API_URL}/api/v1/db/data/v1/${args.baseId}/${args.tableName}/${args.recordId}`, {
+        method: 'PATCH',
+        headers: {
+          'xc-token': NOCODB_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(args.data),
+      });
+      const data = await res.json();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(data, null, 2),
+          },
+        ],
+      };
+    }
+    
+    if (name === 'nocodb_delete_record') {
+      const res = await fetch(`${NOCODB_API_URL}/api/v1/db/data/v1/${args.baseId}/${args.tableName}/${args.recordId}`, {
+        method: 'DELETE',
+        headers: {
+          'xc-token': NOCODB_TOKEN,
+        },
+      });
+      const data = await res.json();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Enregistrement ${args.recordId} supprimé`,
+          },
+        ],
+      };
+    }
+    
+    throw new Error(`Outil inconnu: ${name}`);
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Erreur: ${error.message}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+});
+
+// Endpoint SSE pour connexion MCP
+app.get('/sse', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || authHeader !== `Bearer ${MCP_SECRET}`) {
+    return res.status(401).json({ error: 'Non autorisé' });
+  }
+  
+  const transport = new SSEServerTransport('/message', res);
+  await server.connect(transport);
+});
+
+app.post('/message', (req, res) => {
+  res.status(200).send();
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ MCP Server (Coolify + NocoDB) démarré sur le port ${PORT}`);
+});
