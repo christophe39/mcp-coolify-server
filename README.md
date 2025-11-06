@@ -1,0 +1,1 @@
+# mcp-coolify-server
